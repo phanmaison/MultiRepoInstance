@@ -15,6 +15,9 @@ namespace Funtions.Configs
     {
         public static IServiceProvider DefaultServiceProvider => CreateDefaultServiceCollection().BuildServiceProvider();
 
+        // get from configuration
+        private const string DefaultConnectionString = "Server=local;Database=db;";
+
         /// <summary>
         /// Default ServiceCollection for almost cases
         /// </summary>
@@ -27,11 +30,11 @@ namespace Funtions.Configs
             collection.AddScoped<IMetadataService, MetadataService>();
 
             // repository
-            collection.AddScoped<IExaminationRepository, ExaminationSqlRepository>();
             collection.AddScoped<IMetadataRepository, MetadataSqlRepository>();
+            // no need to register IExaminationRepository
 
             // db connection
-            collection.AddScoped<IDbConnection>((serviceProvider) => { return new SqlConnection("Server=local;Database=db;"); });
+            collection.AddScoped<IDbConnection>((serviceProvider) => { return new SqlConnection(DefaultConnectionString); });
 
             return collection;
         }
@@ -52,10 +55,6 @@ namespace Funtions.Configs
             var collection = CreateDefaultServiceCollection();
 
             // override default collection
-            collection.AddTransient<IExaminationRepository, ExaminationSqlRepository>();
-            collection.AddTransient<IExaminationSqlRepository, ExaminationSqlRepository>();
-            collection.AddTransient<IExaminationCsvRepository, ExaminationCsvRepository>();
-
             // create multiple instances of IUserRepository
             collection.AddScoped<List<IExaminationRepository>>((serviceProvider) =>
             {
@@ -63,21 +62,20 @@ namespace Funtions.Configs
 
                 foreach (var examinationType in request.Ids)
                 {
+                    IExaminationRepository repo;
+
                     // create new instance based on configuration
                     if (!ExaminationTypeConfig.Providers.ContainsKey(examinationType) ||
                         ExaminationTypeConfig.Providers[examinationType] != ExaminationDataSource.Csv)
                     {
-                        var repo = serviceProvider.GetService<IExaminationSqlRepository>();
-                        repo.SetExamination(examinationType);
-                        repo.SetConnection(ExaminationTypeData.Dictionary[examinationType].ConnectionString);
-                        repositories.Add(repo);
+                        repo = new ExaminationSqlRepository(examinationType, ExaminationTypeData.Dictionary[examinationType].ConnectionString);
                     }
                     else
                     {
-                        var repo = serviceProvider.GetService<IExaminationCsvRepository>();
-                        repo.SetExamination(examinationType);
-                        repositories.Add(repo);
+                        repo = new ExaminationCsvRepository(examinationType);
                     }
+
+                    repositories.Add(repo);
                 }
 
                 return repositories;
